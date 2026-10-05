@@ -207,13 +207,7 @@ function kb_fp_link_identity( string $fp_hash, ?string $phone_raw, ?string $emai
     global $wpdb;
     $table = kb_fp_table();
 
-    $phone_hash = null;
-    if ( $phone_raw ) {
-        $p = preg_replace( '/[^0-9]/', '', $phone_raw );
-        if ( strlen( $p ) === 10 && $p[0] === '0' ) $p = '213' . substr( $p, 1 );
-        elseif ( strlen( $p ) === 9 && $p[0] !== '0' ) $p = '213' . $p;
-        if ( $p ) $phone_hash = hash( 'sha256', $p );
-    }
+    $phone_hash = $phone_raw ? kb_capi_hash_phone( $phone_raw ) : null;
     $email_hash = $email_raw ? hash( 'sha256', strtolower( trim( $email_raw ) ) ) : null;
 
     $row = $wpdb->get_row( $wpdb->prepare(
@@ -234,11 +228,8 @@ function kb_fp_link_identity( string $fp_hash, ?string $phone_raw, ?string $emai
  */
 function kb_fp_find_by_phone( string $phone_raw ): ?string {
     global $wpdb;
-    $p = preg_replace( '/[^0-9]/', '', $phone_raw );
-    if ( strlen( $p ) === 10 && $p[0] === '0' ) $p = '213' . substr( $p, 1 );
-    elseif ( strlen( $p ) === 9 && $p[0] !== '0' ) $p = '213' . $p;
-    if ( ! $p ) return null;
-    $phone_hash = hash( 'sha256', $p );
+    $phone_hash = kb_capi_hash_phone( $phone_raw );
+    if ( ! $phone_hash ) return null;
     return $wpdb->get_var( $wpdb->prepare(
         "SELECT external_id FROM " . kb_fp_table() . " WHERE phone_hash = %s ORDER BY last_seen DESC LIMIT 1",
         $phone_hash
@@ -282,29 +273,18 @@ function kb_fp_get_enriched_user_data( $order ): array {
     $ip = $order->get_meta( '_kb_client_ip' ) ?: $order->get_customer_ip_address() ?: kb_fp_get_ip();
     $ua = $order->get_meta( '_kb_client_ua' ) ?: $order->get_customer_user_agent() ?: ( $_SERVER['HTTP_USER_AGENT'] ?? null );
 
-    // ── Hash téléphone DZ ────────────────────────────────────────────────────
-    $phone_hash = null;
-    if ( $phone ) {
-        $p = preg_replace( '/[^0-9]/', '', $phone );
-        if ( strlen( $p ) === 10 && $p[0] === '0' ) $p = '213' . substr( $p, 1 );
-        elseif ( strlen( $p ) === 9 && $p[0] !== '0' ) $p = '213' . $p;
-        if ( $p ) $phone_hash = hash( 'sha256', $p );
-    }
-
-    // ── Hash nom ─────────────────────────────────────────────────────────────
-    $parts   = preg_split( '/\s+/u', $fn );
-    $fn_hash = $ln ? hash( 'sha256', strtolower( $fn ) ) : hash( 'sha256', strtolower( $parts[0] ?? $fn ) );
-    $last    = $ln ?: ( count( $parts ) > 1 ? end( $parts ) : $fn );
-    $ln_hash = hash( 'sha256', strtolower( $last ) );
+    // ── Hash (normalisation Meta : helpers partagés de weconvert-capi.php) ───
+    $names   = kb_capi_name_hashes( $fn, $ln );
+    $country = $country ?: 'DZ';
 
     return array_filter( [
-        'ph'                => $phone_hash,
-        'fn'                => $fn_hash,
-        'ln'                => $ln_hash,
+        'ph'                => kb_capi_hash_phone( $phone ),
+        'fn'                => $names['fn'],
+        'ln'                => $names['ln'],
         'em'                => $email  ? hash( 'sha256', strtolower( trim( $email ) ) )   : null,
-        'ct'                => $city   ? hash( 'sha256', strtolower( trim( $city ) ) )    : null,
-        'st'                => $state  ? hash( 'sha256', strtolower( trim( $state ) ) )   : null,
-        'country'           => $country? hash( 'sha256', strtolower( trim( $country ) ) ) : null,
+        'ct'                => kb_capi_hash_text( $city ),
+        'st'                => kb_capi_hash_text( kb_capi_state_name( $country, (string) $state ) ),
+        'country'           => hash( 'sha256', strtolower( $country ) ),
         'external_id'       => $external_id,
         'fbc'               => $fbc,
         'fbp'               => $fbp,
@@ -500,6 +480,19 @@ function kb_fp_proxy_script_handler(): void {
 
 // ── pixel-proxy : events fbq → CAPI server-side ───────────────────────────────
 
+/**
+ * Events que le proxy ne doit PAS renvoyer en CAPI, parce qu'un module dédié
+ * les envoie déjà côté serveur avec le même event_id.
+ */
+function kb_fp_proxy_skip_events(): array {
+    $skip = [];
+    if ( function_exists( 'kb_capi_send_purchase' ) )               $skip[] = 'Purchase';
+    if ( function_exists( 'kb_px_viewcontent_capi_handler' ) )      $skip[] = 'ViewContent';
+    if ( function_exists( 'kb_ev_addtocart_handler' ) )             $skip[] = 'AddToCart';
+    if ( function_exists( 'kb_ev_initiatecheckout_handler' ) )      $skip[] = 'InitiateCheckout';
+    return $skip;
+}
+
 function kb_fp_proxy_event_handler( WP_REST_Request $req ): WP_REST_Response {
     $body = $req->get_json_params();
     if ( empty( $body['event_name'] ) || empty( $body['event_id'] ) ) {
@@ -512,6 +505,14 @@ function kb_fp_proxy_event_handler( WP_REST_Request $req ): WP_REST_Response {
     $allowed_events = [ 'PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase' ];
     if ( ! in_array( $event_name, $allowed_events, true ) ) {
         return new WP_REST_Response( [ 'error' => 'Event not allowed' ], 403 );
+    }
+
+    // Ces events ont déjà leur propre envoi CAPI (même event_id) avec un user_data
+    // plus riche : Purchase (capi.php, ph/fn/ln/ct/st), ViewContent (pixel.php),
+    // AddToCart + InitiateCheckout (events.php). Les renvoyer ici créait un 2e event
+    // serveur SANS ph/fn/ln → couverture ph/fn/ln/ct/st bloquée à ~50 % dans l'EMQ.
+    if ( in_array( $event_name, kb_fp_proxy_skip_events(), true ) ) {
+        return new WP_REST_Response( [ 'ok' => true, 'skipped' => 'server_side_module', 'event_id' => $event_id ], 200 );
     }
 
     $session_token = kb_fp_get_session_token();
@@ -610,6 +611,7 @@ window._kb_fbp         = '<?php echo esc_js( $fbp ); ?>';
 window._kb_proxy_url   = '<?php echo esc_js( $proxy_url ); ?>';
 window._kb_pixel_id    = '<?php echo esc_js( $pixel_id ); ?>';
 window._kb_fbevents_url= '<?php echo esc_js( $fbevents_url ); ?>';
+window._kb_proxy_skip  = <?php echo wp_json_encode( kb_fp_proxy_skip_events() ); ?>;
 
 try {
     var s = localStorage.getItem('kb_fp_id');
@@ -745,6 +747,8 @@ function collectAndSend() {
 function sendToProxy(name,data,opts){
     var eid=opts&&(opts.eventID||opts.event_id);
     if(!eid) return;
+    // Déjà envoyé en CAPI par son module dédié (même event_id) → pas de doublon serveur
+    if((window._kb_proxy_skip||[]).indexOf(name)!==-1) return;
     fetch(window._kb_proxy_url,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -812,8 +816,11 @@ document.addEventListener('DOMContentLoaded',function(){
         s.async=true;
         // ← Chargé depuis TON domaine (first-party) — adblockers ne bloquent pas
         s.src=window._kb_fbevents_url;
+        // init mis en file TOUT DE SUITE (avant le chargement du script) : sinon un
+        // track déjà en file (ex. Purchase sur la thank-you page) passe avant l'init
+        // et fbevents.js l'ignore. _kb_am = Advanced Matching hashé (thank-you page).
+        n('init',window._kb_pixel_id,window._kb_am||{});
         s.onload=function(){
-            fbq('init',window._kb_pixel_id);
             fbq('track','PageView');
             patchFbq(window.fbq);
         };
@@ -1048,12 +1055,7 @@ function kb_fp_build_midfunnel_user_data(
         $customer = WC()->customer;
         $phone    = $customer->get_billing_phone();
         $email    = $customer->get_billing_email();
-        if ( $phone ) {
-            $p = preg_replace( '/[^0-9]/', '', $phone );
-            if ( strlen( $p ) === 10 && $p[0] === '0' ) $p = '213' . substr( $p, 1 );
-            elseif ( strlen( $p ) === 9 && $p[0] !== '0' ) $p = '213' . $p;
-            if ( $p ) $wc_ph = hash( 'sha256', $p );
-        }
+        if ( $phone ) $wc_ph = kb_capi_hash_phone( $phone );
         if ( $email ) $wc_em = hash( 'sha256', strtolower( trim( $email ) ) );
         // Si pas d'external_id DB, utiliser le customer_id WC
         if ( ! $external_id ) {

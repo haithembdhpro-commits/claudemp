@@ -4,10 +4,16 @@
  *   WeConvert.io CAPI — Meta Conversions API
  * Description: Purchase côté serveur + browser. Déduplication automatique via eventID.
  *              Zéro credential hardcodé — tout depuis WeConvert.io Settings.
- * Version:     2.5.0
+ * Version:     2.6.0
  * Author:      WeConvert.io
  *
  * Changelog:
+ *   v2.6.0 — EMQ : vraie cause des ph/fn/ln/ct/st à ~50 % = le proxy fingerprint
+ *             renvoyait Purchase en CAPI une 2e fois (même event_id, sans PII).
+ *             Le proxy ignore désormais Purchase/ViewContent/AddToCart/InitiateCheckout.
+ *             Normalisation Meta partagée : téléphone (+213/00213/0 en trop),
+ *             fn/ln/ct/st sans espaces/accents/ponctuation, wilaya DZ-16 → « alger ».
+ *             Advanced Matching navigateur sur la thank-you page (window._kb_am).
  *   v2.5.0 — FIX déduplication browser/CAPI : event_id suffixé pixel primaire
  *             sauvé dans _kb_capi_event_id_browser, lu par le JS footer.
  *             Supprime le double-comptage Meta qui causait ph/fn/ln à 50%.
@@ -72,13 +78,72 @@ if ( ! function_exists( 'kb_capi_hash_phone' ) ) {
      * 0XXXXXXXXX → 213XXXXXXXXX
      */
     function kb_capi_hash_phone( $phone ): ?string {
-        $phone = preg_replace( '/[^0-9]/', '', (string) $phone );
-        if ( strlen( $phone ) === 10 && $phone[0] === '0' ) {
-            $phone = '213' . substr( $phone, 1 );
-        } elseif ( strlen( $phone ) === 9 && $phone[0] !== '0' ) {
-            $phone = '213' . $phone;
-        }
+        $phone = kb_capi_norm_phone( $phone );
         return $phone !== '' ? hash( 'sha256', $phone ) : null;
+    }
+}
+
+if ( ! function_exists( 'kb_capi_norm_phone' ) ) {
+    /**
+     * Numéro algérien → format E.164 sans « + » attendu par Meta (213XXXXXXXXX).
+     * Gère 0555…, 555…, +213 555…, 00213 555…, +213 0555… (0 en trop après l'indicatif).
+     */
+    function kb_capi_norm_phone( $phone ): string {
+        $p = preg_replace( '/\D/', '', (string) $phone );
+        if ( str_starts_with( $p, '00' ) )  $p = substr( $p, 2 );
+        if ( str_starts_with( $p, '213' ) ) $p = substr( $p, 3 );
+        $p = ltrim( $p, '0' );
+        return strlen( $p ) === 9 ? '213' . $p : $p;
+    }
+}
+
+if ( ! function_exists( 'kb_capi_norm_text' ) ) {
+    /**
+     * Normalisation Meta pour fn / ln / ct / st : minuscules, sans accents,
+     * sans espaces ni ponctuation. Les lettres arabes sont conservées (UTF-8).
+     */
+    function kb_capi_norm_text( $value ): string {
+        $v = mb_strtolower( trim( (string) $value ), 'UTF-8' );
+        if ( function_exists( 'remove_accents' ) ) $v = remove_accents( $v );
+        return preg_replace( '/[^\p{L}\p{N}]+/u', '', $v );
+    }
+}
+
+if ( ! function_exists( 'kb_capi_hash_text' ) ) {
+    function kb_capi_hash_text( $value ): ?string {
+        $v = kb_capi_norm_text( $value );
+        return $v !== '' ? hash( 'sha256', $v ) : null;
+    }
+}
+
+if ( ! function_exists( 'kb_capi_state_name' ) ) {
+    /**
+     * Wilaya : WooCommerce stocke un code (DZ-16) → on envoie le nom (« Alger »),
+     * sans le numéro éventuel (« 16 - Alger »).
+     */
+    function kb_capi_state_name( string $country, string $state ): string {
+        if ( $state !== '' && function_exists( 'WC' ) && WC()->countries ) {
+            $states = WC()->countries->get_states( $country ?: 'DZ' );
+            if ( is_array( $states ) && isset( $states[ $state ] ) ) $state = $states[ $state ];
+        }
+        return trim( preg_replace( '/^\s*\d+\s*[-–:.]?\s*/u', '', html_entity_decode( $state ) ) );
+    }
+}
+
+if ( ! function_exists( 'kb_capi_name_hashes' ) ) {
+    /**
+     * fn / ln hashés. Cas DZ fréquent : nom complet saisi dans un seul champ
+     * (« Mohamed Amine Benali ») → fn = premier mot, ln = dernier mot.
+     */
+    function kb_capi_name_hashes( string $first, string $last ): array {
+        $first = trim( $first );
+        $last  = trim( $last );
+        if ( $last === '' ) {
+            $parts = preg_split( '/\s+/u', $first, -1, PREG_SPLIT_NO_EMPTY ) ?: [ '' ];
+            $first = $parts[0];
+            $last  = count( $parts ) > 1 ? end( $parts ) : '';
+        }
+        return [ 'fn' => kb_capi_hash_text( $first ), 'ln' => kb_capi_hash_text( $last ) ];
     }
 }
 
@@ -248,27 +313,17 @@ if ( ! function_exists( 'kb_capi_build_user_data_from_order' ) ) {
             ?: hash( 'sha256', (string) $order->get_id() );
 
         // Nom → fn / ln (gère le cas DZ où tout est dans first_name)
-        $full_name = trim( $order->get_billing_first_name() );
-        $last_name = trim( $order->get_billing_last_name() );
-        $parts     = preg_split( '/\s+/u', $full_name );
-
-        if ( $last_name !== '' ) {
-            $fn_hash = kb_capi_hash( $full_name );
-            $ln_hash = kb_capi_hash( $last_name );
-        } else {
-            $fn_hash = kb_capi_hash( strtolower( $parts[0] ) );
-            $last    = count( $parts ) > 1 ? $parts[ count( $parts ) - 1 ] : $parts[0];
-            $ln_hash = kb_capi_hash( strtolower( $last ) );
-        }
+        $names   = kb_capi_name_hashes( $order->get_billing_first_name(), $order->get_billing_last_name() );
+        $country = $order->get_billing_country() ?: 'DZ';
 
         return array_filter( [
             'ph'                => kb_capi_hash_phone( $order->get_billing_phone() ),
-            'fn'                => $fn_hash,
-            'ln'                => $ln_hash,
+            'fn'                => $names['fn'],
+            'ln'                => $names['ln'],
             'em'                => kb_capi_hash( $order->get_billing_email() ),
-            'ct'                => kb_capi_hash( $order->get_billing_city() ),
-            'st'                => kb_capi_hash( $order->get_billing_state() ),
-            'country'           => kb_capi_hash( $order->get_billing_country() ),
+            'ct'                => kb_capi_hash_text( $order->get_billing_city() ),
+            'st'                => kb_capi_hash_text( kb_capi_state_name( $country, $order->get_billing_state() ) ),
+            'country'           => kb_capi_hash( $country ),
             'external_id'       => $external_id,
             'fbc'               => $fbc,
             'fbp'               => $fbp,
@@ -477,8 +532,16 @@ function kb_capi_inject_purchase_js_footer() {
         'contents'     => $items,
         'num_items'    => count( $items ),
     ];
+
+    // Advanced Matching navigateur : mêmes clés hashées que le CAPI, pour que
+    // l'event browser porte aussi ph/fn/ln/ct/st (lu par fbq('init') du loader fingerprint).
+    $am = array_intersect_key(
+        kb_capi_build_user_data_from_order( $order ),
+        array_flip( [ 'ph', 'fn', 'ln', 'ct', 'st', 'country', 'external_id' ] )
+    );
     ?>
     <script>
+    window._kb_am = <?php echo wp_json_encode( (object) $am ); ?>;
     (function() {
         var sessionKey = '<?php echo esc_js( $session_key ); ?>';
         var eventID    = '<?php echo esc_js( $event_id ); ?>';
