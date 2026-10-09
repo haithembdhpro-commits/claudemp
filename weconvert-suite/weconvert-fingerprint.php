@@ -827,8 +827,29 @@ document.addEventListener('DOMContentLoaded',function(){
         document.head.appendChild(s);
     }
 
-    collectAndSend();
+    scheduleCollect();
 });
+
+// Empreinte = canvas + WebGL + audio + 30 mesures de polices (reflows forcés) :
+// lancée APRÈS le chargement complet, quand le navigateur est inactif, pour ne pas
+// retarder l'affichage (LCP mobile). Une fois par session suffit : le résultat
+// serveur est gardé 30 min (transient) → on ne recollecte qu'après 25 min.
+function scheduleCollect(){
+    try{
+        var last=+sessionStorage.getItem('kb_fp_sent')||0;
+        if(Date.now()-last<25*60*1000) return;
+    }catch(e){}
+    var run=function(){
+        try{sessionStorage.setItem('kb_fp_sent',String(Date.now()));}catch(e){}
+        collectAndSend();
+    };
+    var idle=function(){
+        if(window.requestIdleCallback) requestIdleCallback(run,{timeout:3000});
+        else setTimeout(run,1500);
+    };
+    if(document.readyState==='complete') idle();
+    else window.addEventListener('load',idle,{once:true});
+}
 
 })();
 </script>
