@@ -346,10 +346,10 @@ function kb_ev_inject_addtocart_js() {
         }
         function toEur(price) { return IS_DZD ? Math.round((price / RATE) * 100) / 100 : price; }
 
-        // Génère un event_id déterministe (même produit dans la même minute = même ID)
+        // event_id unique par clic (le même sert au browser et au CAPI). Un ID
+        // « produit + minute » fusionnait les visiteurs d'une même minute.
         function makeEventId(productId) {
-            var minute = Math.floor(Date.now() / 60000);
-            return 'kb_atc_' + productId + '_' + minute;
+            return 'kb_atc_' + productId + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
         }
 
         function fireAddToCart(productId, productName, price, qty) {

@@ -136,11 +136,14 @@ function kb_px_inject_pageview_js() {
     $pixel_id = kb_px_cfg( 'meta_pixel_id' );
     if ( ! $pixel_id ) return;
 
-    // event_id unique par page + session (pour déduplication éventuelle future)
-    $event_id = 'kb_pv_' . substr( md5( $pixel_id . get_the_ID() . ( $_SERVER['REQUEST_URI'] ?? '' ) ), 0, 16 );
+    // event_id généré dans le navigateur, unique par chargement de page.
+    // Un ID calculé en PHP est figé dans la page mise en cache (LiteSpeed ignore
+    // fbclid) : tous les visiteurs envoyaient le même eventID, Meta les dédupliquait
+    // en un seul PageView → landing page views ≈ 1-2 % des clics.
     ?>
     <script>
     (function() {
+        var pvId = 'kb_pv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
         // Initialisation pixel Meta (si pas déjà fait par un autre plugin)
         if ( typeof window.fbq === 'undefined' ) {
             !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -150,7 +153,7 @@ function kb_px_inject_pageview_js() {
             document,'script','https://connect.facebook.net/en_US/fbevents.js');
             fbq('init', '<?php echo esc_js( $pixel_id ); ?>');
         }
-        fbq('track', 'PageView', {}, { eventID: '<?php echo esc_js( $event_id ); ?>' });
+        fbq('track', 'PageView', {}, { eventID: pvId });
     })();
     </script>
     <noscript>
@@ -296,10 +299,9 @@ function kb_px_inject_viewcontent_js() {
         : $price_raw;
     $send_currency = strtoupper( $raw_currency ) === 'DZD' ? 'EUR' : strtoupper( $raw_currency );
 
-    // event_id déterministe — même valeur envoyée au browser ET au CAPI endpoint
-    // Inclut le timestamp minute pour éviter les faux doublons sur revisites
-    $event_id = 'kb_vc_' . $product_id . '_' . substr( md5( $product_id . $pixel_id . floor( time() / 60 ) ), 0, 12 );
-
+    // event_id généré dans le navigateur (unique par vue), envoyé tel quel au
+    // browser ET au CAPI endpoint → déduplication correcte. Calculé en PHP, il
+    // restait figé dans la page en cache et fusionnait tous les visiteurs.
     $endpoint_url = rest_url( 'weconvert/v1/viewcontent' );
 
     ?>
@@ -307,7 +309,7 @@ function kb_px_inject_viewcontent_js() {
     (function() {
         var PIXEL_ID   = '<?php echo esc_js( $pixel_id ); ?>';
         var PRODUCT_ID = <?php echo (int) $product_id; ?>;
-        var EVENT_ID   = '<?php echo esc_js( $event_id ); ?>';
+        var EVENT_ID   = 'kb_vc_' + PRODUCT_ID + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
         var ENDPOINT   = '<?php echo esc_js( $endpoint_url ); ?>';
         var PRICE      = <?php echo (float) $price_eur; ?>;
         var CURRENCY   = '<?php echo esc_js( $send_currency ); ?>';
