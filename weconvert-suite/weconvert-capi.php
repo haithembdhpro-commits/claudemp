@@ -386,7 +386,7 @@ function kb_capi_send_purchase( $order_or_id ) {
     // ── Payload ───────────────────────────────────────────────────────────────
     $raw_currency  = $order->get_currency();
     $send_currency = kb_capi_send_currency( $raw_currency );
-    $raw_total     = (float) $order->get_total();
+    $raw_total     = max( 0.0, (float) $order->get_total() - (float) $order->get_shipping_total() - (float) $order->get_shipping_tax() ); // hors livraison (payée au livreur)
     $send_total    = kb_capi_to_eur( $raw_total, $raw_currency );
 
     $contents    = [];
@@ -515,7 +515,7 @@ function kb_capi_inject_purchase_js_footer() {
         ?: ( 'kb_' . $order_id . '_' . substr( md5( $order_id . $pixel_id ), 0, 12 ) );
 
     $raw_curr      = $order->get_currency() ?: 'DZD';
-    $raw_total     = (float) $order->get_total();
+    $raw_total     = max( 0.0, (float) $order->get_total() - (float) $order->get_shipping_total() - (float) $order->get_shipping_tax() ); // hors livraison (payée au livreur)
     $send_value    = kb_capi_to_eur( $raw_total, $raw_curr );
     $send_currency = kb_capi_send_currency( $raw_curr );
 

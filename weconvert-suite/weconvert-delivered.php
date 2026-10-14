@@ -211,7 +211,7 @@ function kb_del_send_event( $order, array $parcel ) {
     }
 
     $raw_currency = $order->get_currency();
-    $raw_total    = (float) $order->get_total();
+    $raw_total    = max( 0.0, (float) $order->get_total() - (float) $order->get_shipping_total() - (float) $order->get_shipping_tax() ); // hors livraison (payée au livreur)
     $rate         = (float) kb_del_cfg( 'rate_dzd_eur', 285 );
     $send_value   = strtoupper( $raw_currency ) === 'DZD'
         ? round( $raw_total / ( $rate ?: 285 ), 2 )

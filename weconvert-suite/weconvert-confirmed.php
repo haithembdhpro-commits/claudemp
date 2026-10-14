@@ -152,7 +152,7 @@ function kb_conf_fire_on_confirmed( $order_id ) {
     // Payload
     $raw_currency  = $order->get_currency();
     $send_currency = kb_capi_send_currency( $raw_currency );
-    $raw_total     = (float) $order->get_total();
+    $raw_total     = max( 0.0, (float) $order->get_total() - (float) $order->get_shipping_total() - (float) $order->get_shipping_tax() ); // hors livraison (payée au livreur)
     $send_value    = kb_capi_to_eur( $raw_total, $raw_currency );
 
     $contents    = [];
