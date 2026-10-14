@@ -376,6 +376,13 @@ function kb_capi_send_purchase( $order_or_id ) {
     // ── Guard double-envoi ────────────────────────────────────────────────────
     if ( $order->get_meta( '_kb_capi_purchase_sent' ) ) return;
 
+    // Verrou atomique : plusieurs hooks (order_created, order_processed, statut
+    // processing/on-hold) peuvent arriver avec un objet commande chargé avant la
+    // sauvegarde de _kb_capi_purchase_sent → le Purchase partait 2 fois.
+    // add_option() échoue si l'option existe déjà, même depuis une autre requête.
+    $lock = 'kb_capi_purchase_lock_' . $order_id;
+    if ( ! add_option( $lock, time(), '', 'no' ) ) return;
+
     // ── Payload ───────────────────────────────────────────────────────────────
     $raw_currency  = $order->get_currency();
     $send_currency = kb_capi_send_currency( $raw_currency );
@@ -428,6 +435,7 @@ function kb_capi_send_purchase( $order_or_id ) {
     $response = kb_capi_call_meta( $payload, true, $primary_event_id_suffixed );
 
     if ( is_wp_error( $response ) ) {
+        delete_option( $lock ); // échec → un hook suivant pourra réessayer
         $order->add_order_note( '[KB CAPI] ❌ ' . $response->get_error_message() );
         return;
     }
@@ -455,6 +463,7 @@ function kb_capi_send_purchase( $order_or_id ) {
             ' | ud: [' . implode( ', ', $ud_keys ) . ']'
         );
     } else {
+        delete_option( $lock );
         $error = $body['error']['message'] ?? wp_json_encode( $body );
         $order->add_order_note( '[KB CAPI] ❌ HTTP ' . $code . ' : ' . $error );
     }

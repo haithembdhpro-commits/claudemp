@@ -6,7 +6,7 @@
  *              OrderConfirmed + OrderDelivered natifs, EcoTrack (Packers) auto-colis + suivi,
  *              fingerprint first-party iOS-proof, multi-pixels illimités.
  *              Un seul plugin à activer — charge tous les modules automatiquement.
- * Version:     6.1.3
+ * Version:     6.1.4
  * Author:      WeConvert.io
  * Requires WC: 7.0
  * Requires PHP: 8.0
@@ -48,7 +48,7 @@ add_filter( 'cron_schedules', function( $s ) {
     return $s;
 } );
 
-define( 'WECONVERT_SUITE_VERSION',  '6.1.3' );
+define( 'WECONVERT_SUITE_VERSION',  '6.1.4' );
 define( 'WECONVERT_SUITE_DIR',      plugin_dir_path( __FILE__ ) );
 define( 'WECONVERT_SUITE_URL',      plugin_dir_url( __FILE__ ) );
 define( 'WECONVERT_SUITE_FILE',     __FILE__ );
