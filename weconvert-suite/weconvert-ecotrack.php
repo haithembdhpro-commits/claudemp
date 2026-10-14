@@ -917,6 +917,8 @@ function kb_eco_admin_tools_page() {
             <?= (int) ( $last['parcels'] ?? 0 ) ?> colis, <?= (int) ( $last['delivered'] ?? 0 ) ?> livrés.</p>
         <?php endif; ?>
 
+        <?php kb_eco_fees_section(); ?>
+
         <hr>
         <h2>Fonctionnement</h2>
         <ul style="list-style:disc;padding-left:20px">
@@ -925,6 +927,188 @@ function kb_eco_admin_tools_page() {
             <li>Pour recréer un colis : supprimer le meta <code>_kb_eco_tracking</code> de la commande, puis « Créer le colis » dans la metabox EcoTrack.</li>
         </ul>
     </div>
+    <?php
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TARIFS — import des prix de livraison EcoTrack vers les zones WooCommerce
+// Une zone WooCommerce par wilaya (DZ:DZ-XX) avec 2 méthodes flat_rate :
+// domicile et stop desk (détecté par les mots-clés stop desk des réglages).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Lit les tarifs de la société via GET /get/fees.
+ * Parse tolérant : les instances EcoTrack ne nomment pas toutes les champs pareil.
+ *
+ * @return array|WP_Error ['delivery' => [wid => ['home'=>?int,'desk'=>?int]], 'returns' => [...], 'raw_keys' => []]
+ */
+function kb_eco_fetch_fees() {
+    if ( ! kb_eco_is_configured() ) return new WP_Error( 'eco_config', 'Token EcoTrack manquant.' );
+
+    $response = kb_eco_api( 'GET', '/get/fees' );
+    if ( is_wp_error( $response ) ) return $response;
+    $code = (int) wp_remote_retrieve_response_code( $response );
+    $body = json_decode( wp_remote_retrieve_body( $response ), true );
+    if ( $code !== 200 || ! is_array( $body ) ) {
+        return new WP_Error( 'eco_fees', "HTTP {$code} — " . substr( wp_remote_retrieve_body( $response ), 0, 300 ) );
+    }
+    if ( isset( $body['data'] ) && is_array( $body['data'] ) ) $body = $body['data'];
+
+    // Liste des tarifs de livraison : clé "livraison" (format EcoTrack), sinon la réponse elle-même.
+    $delivery_rows = $body['livraison'] ?? $body['delivery'] ?? ( array_is_list( $body ) ? $body : [] );
+    $return_rows   = $body['retours'] ?? $body['retour'] ?? $body['returns'] ?? [];
+
+    $parse = function ( $rows ): array {
+        $out = [];
+        foreach ( (array) $rows as $row ) {
+            if ( ! is_array( $row ) ) continue;
+            $wid = (int) ( $row['wilaya_id'] ?? $row['wilaya'] ?? $row['id'] ?? 0 );
+            if ( $wid < 1 || $wid > 69 ) continue;
+            $home = $row['tarif'] ?? $row['tarif_domicile'] ?? $row['domicile'] ?? $row['home'] ?? $row['price'] ?? null;
+            $desk = $row['tarif_stopdesk'] ?? $row['tarif_stop_desk'] ?? $row['stopdesk'] ?? $row['stop_desk'] ?? $row['desk'] ?? null;
+            $out[ $wid ] = [
+                'home' => is_numeric( $home ) && (float) $home > 0 ? (int) round( (float) $home ) : null,
+                'desk' => is_numeric( $desk ) && (float) $desk > 0 ? (int) round( (float) $desk ) : null,
+            ];
+        }
+        ksort( $out );
+        return $out;
+    };
+
+    return [
+        'delivery' => $parse( $delivery_rows ),
+        'returns'  => $parse( $return_rows ),
+        'raw_keys' => array_slice( array_keys( $body ), 0, 10 ),
+    ];
+}
+
+function kb_eco_method_is_desk( string $title ): bool {
+    $keywords = array_filter( array_map( 'trim', explode( ',', mb_strtolower(
+        kb_eco_cfg( 'eco_desk_keywords', 'stop desk,stopdesk,bureau,agence,point relais,مكتب' )
+    ) ) ) );
+    $title = mb_strtolower( $title );
+    foreach ( $keywords as $kw ) {
+        if ( $kw !== '' && str_contains( $title, $kw ) ) return true;
+    }
+    return false;
+}
+
+/**
+ * Compare les tarifs EcoTrack aux méthodes flat_rate des zones WooCommerce.
+ * Ne touche à rien : retourne la liste des changements proposés.
+ */
+function kb_eco_fees_plan( array $delivery, int $adjust ): array {
+    $rows = [];
+    if ( ! class_exists( 'WC_Shipping_Zones' ) ) return $rows;
+
+    foreach ( WC_Shipping_Zones::get_zones() as $zone_data ) {
+        $zone = new WC_Shipping_Zone( $zone_data['id'] );
+        $wid  = 0;
+        foreach ( $zone->get_zone_locations() as $loc ) {
+            if ( preg_match( '/^DZ:DZ-(\d{1,2})$/', (string) $loc->code, $m ) ) { $wid = (int) $m[1]; break; }
+        }
+        if ( ! $wid ) continue;
+
+        foreach ( $zone->get_shipping_methods( true ) as $method ) {
+            if ( $method->id !== 'flat_rate' ) continue;
+            $title   = (string) $method->get_title();
+            $type    = kb_eco_method_is_desk( $title ) ? 'desk' : 'home';
+            $current = (string) $method->get_option( 'cost' );
+            $eco     = $delivery[ $wid ][ $type ] ?? null;
+            $new     = $eco !== null ? max( 0, $eco + $adjust ) : null;
+            $rows[]  = [
+                'zone'        => $zone->get_zone_name(),
+                'wilaya'      => $wid,
+                'instance_id' => (int) $method->instance_id,
+                'type'        => $type,
+                'title'       => $title,
+                'current'     => $current,
+                'eco'         => $eco,
+                'new'         => $new,
+                'change'      => $new !== null && (string) $new !== trim( $current ),
+            ];
+        }
+    }
+    return $rows;
+}
+
+function kb_eco_fees_apply( array $rows ): int {
+    $changed = 0;
+    foreach ( $rows as $r ) {
+        if ( empty( $r['change'] ) ) continue;
+        $method = WC_Shipping_Zones::get_shipping_method( $r['instance_id'] );
+        if ( ! $method ) continue;
+        $key  = $method->get_instance_option_key();
+        $opts = get_option( $key, [] );
+        if ( ! is_array( $opts ) ) continue;
+        $opts['cost'] = (string) $r['new'];
+        update_option( $key, $opts );
+        $changed++;
+    }
+    if ( $changed ) {
+        // Recalcul des frais côté WooCommerce + cartes de livraison du thème Jude + cache pages.
+        WC_Cache_Helper::get_transient_version( 'shipping', true );
+        global $wpdb;
+        $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_jude\_squares\_shipping\_%' OR option_name LIKE '\_transient\_timeout\_jude\_squares\_shipping\_%'" );
+        do_action( 'litespeed_purge_all' );
+    }
+    return $changed;
+}
+
+function kb_eco_fees_section(): void {
+    $adjust = isset( $_POST['eco_fees_adjust'] ) ? (int) $_POST['eco_fees_adjust'] : 0;
+    $do     = '';
+    if ( isset( $_POST['eco_fees_preview'] ) && check_admin_referer( 'eco_fees' ) ) $do = 'preview';
+    if ( isset( $_POST['eco_fees_apply'] ) && check_admin_referer( 'eco_fees' ) )   $do = 'apply';
+
+    echo '<hr><h2>💰 Tarifs de livraison EcoTrack → WooCommerce</h2>';
+    echo '<p>Lit les tarifs de la société (domicile / stop desk par wilaya) et met à jour les zones de livraison WooCommerce. '
+        . '« Prévisualiser » ne modifie rien.</p>';
+
+    if ( $do ) {
+        $fees = kb_eco_fetch_fees();
+        if ( is_wp_error( $fees ) ) {
+            echo '<div class="notice notice-error"><p>❌ ' . esc_html( $fees->get_error_message() ) . '</p></div>';
+        } elseif ( empty( $fees['delivery'] ) ) {
+            echo '<div class="notice notice-error"><p>❌ Aucun tarif reconnu dans la réponse EcoTrack (clés reçues : '
+                . esc_html( implode( ', ', $fees['raw_keys'] ) ) . '). Rien n\'a été modifié — envoie ces clés au support.</p></div>';
+        } else {
+            if ( ! empty( $fees['returns'] ) ) update_option( 'kb_eco_return_fees', $fees['returns'], false );
+            $plan    = kb_eco_fees_plan( $fees['delivery'], $adjust );
+            $pending = count( array_filter( $plan, fn( $r ) => $r['change'] ) );
+
+            if ( $do === 'apply' ) {
+                $n = kb_eco_fees_apply( $plan );
+                echo '<div class="notice notice-success"><p>✅ ' . (int) $n . ' tarif(s) mis à jour. Cache livraison et pages vidé.</p></div>';
+                $plan = kb_eco_fees_plan( $fees['delivery'], $adjust );
+                $pending = 0;
+            } else {
+                echo '<div class="notice notice-info"><p>' . count( $fees['delivery'] ) . ' wilayas reçues · '
+                    . (int) $pending . ' tarif(s) différent(s) de WooCommerce. Vérifie le tableau puis « Appliquer ».</p></div>';
+            }
+
+            echo '<table class="widefat striped" style="max-width:900px"><thead><tr><th>Zone</th><th>Méthode</th><th>Actuel (DA)</th><th>EcoTrack (DA)</th><th>Nouveau (DA)</th></tr></thead><tbody>';
+            foreach ( $plan as $r ) {
+                $style = $r['change'] ? ' style="background:#fff4d6"' : '';
+                echo '<tr' . $style . '><td>' . esc_html( $r['zone'] ) . '</td><td>' . ( $r['type'] === 'desk' ? '🏢 Stop desk' : '🏠 Domicile' )
+                    . '</td><td>' . esc_html( $r['current'] ) . '</td><td>' . ( $r['eco'] === null ? '— (non fourni, inchangé)' : (int) $r['eco'] )
+                    . '</td><td>' . ( $r['new'] === null ? '—' : (int) $r['new'] ) . '</td></tr>';
+            }
+            echo '</tbody></table>';
+        }
+    }
+    ?>
+    <form method="post" style="margin-top:12px">
+        <?php wp_nonce_field( 'eco_fees' ); ?>
+        <label>Ajustement par colis (DA, peut être négatif) :
+            <input type="number" name="eco_fees_adjust" value="<?= (int) $adjust ?>" step="10" style="width:90px">
+        </label>
+        <button class="button" name="eco_fees_preview" value="1">👁️ Prévisualiser</button>
+        <?php if ( $do === 'preview' && ! empty( $pending ) ) : ?>
+            <button class="button button-primary" name="eco_fees_apply" value="1"
+                onclick="return confirm('Mettre à jour <?= (int) $pending ?> tarif(s) de livraison WooCommerce ?');">✅ Appliquer</button>
+        <?php endif; ?>
+    </form>
     <?php
 }
 
