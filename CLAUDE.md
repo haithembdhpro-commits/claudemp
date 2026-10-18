@@ -6,7 +6,7 @@ Dépôt de **WeConvert** (Annaba, Algérie). Réponds à l'utilisateur en franç
 | Chemin | Quoi |
 |---|---|
 | `weconvert-suite/` | Plugin WordPress/WooCommerce « WeConvert.io Suite » : Meta Pixel + CAPI, OrderConfirmed, OrderDelivered, EcoTrack, fingerprint, dashboard COD. Voir `weconvert-suite/README.md`. |
-| `elearning/` (à venir) | Plateforme e-learning Next.js + Supabase + Bunny Stream + Chargily/Stripe (client : Tradeversity). |
+| `elearning/` | Plateforme e-learning Tradeversity — Next.js 16 (App Router, Tailwind 4). Frontend sur données fictives (`src/lib/mock-data.ts`) ; `src/lib/data.ts` est l'unique couche à brancher sur Supabase. Lire `elearning/AGENTS.md` : Next.js 16 diffère des versions connues, la doc est dans `node_modules/next/dist/docs/`. |
 | `*.pdf` | Documents commerciaux (devis, récapitulatif des charges). |
 
 ## Skills du projet (`.claude/skills/`) — à charger avant de coder
@@ -21,6 +21,7 @@ Dépôt de **WeConvert** (Annaba, Algérie). Réponds à l'utilisateur en franç
 |---|---|
 | `composer syntax` | `php -l` sur tout le plugin |
 | `composer lint` / `composer fix` | PHPCS (WordPress-Extra + Security + PHPCompatibility) / correction auto |
+| `cd elearning && npm run dev` / `npm run build` / `npm run lint` / `npx tsc --noEmit` | Plateforme e-learning (lancer `npx next typegen` avant `tsc` si les types de routes manquent) |
 | `/lint`, `/release`, `/secure` | Vérifications, zip du plugin, revue sécurité (sous-agents `test-runner`, `security-reviewer`) |
 
 `vendor/` est installé par le hook SessionStart (paquets clonés depuis GitHub) ; s'il manque, seul `php -l` est disponible. PHPStan n'est pas installé : son paquet n'est distribué qu'en archive GitHub, bloquée par le réseau de l'environnement.
