@@ -1,0 +1,24 @@
+{
+    "name": "weconvert/claudemp",
+    "description": "WeConvert.io Suite (WordPress/WooCommerce) \u2014 outillage qualit\u00e9",
+    "type": "project",
+    "license": "proprietary",
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3.10",
+        "wp-coding-standards/wpcs": "^3.1",
+        "phpcompatibility/phpcompatibility-wp": "^2.1",
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "sort-packages": true,
+        "preferred-install": "source"
+    },
+    "scripts": {
+        "lint": "phpcs",
+        "fix": "phpcbf",
+        "syntax": "find weconvert-suite -name '*.php' -print0 | xargs -0 -n1 php -l"
+    }
+}

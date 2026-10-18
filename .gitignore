@@ -1,1 +1,6 @@
 *.zip
+vendor/
+node_modules/
+.env
+.env.*
+!.env.example

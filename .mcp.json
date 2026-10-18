@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.83",
+        "--headless",
+        "--isolated",
+        "--no-sandbox",
+        "--executable-path",
+        "/opt/pw-browsers/chromium"
+      ]
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?read_only=true",
+      "headers": {
+        "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN:-}"
+      }
+    },
+    "stripe": {
+      "type": "http",
+      "url": "https://mcp.stripe.com",
+      "headers": {
+        "Authorization": "Bearer ${STRIPE_SECRET_KEY:-}"
+      }
+    }
+  }
+}
