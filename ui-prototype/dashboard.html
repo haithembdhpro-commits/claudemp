@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --border: #eceef1;
+    --row: #f5f6f8;
+    --text: #111827;
+    --muted: #6b7280;
+    --faint: #9ca3af;
+    --accent: #0ea5e9;
+    --accent-soft: #e0f2fe;
+    --green: #16a34a;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --purple: #a855f7;
+    --track: #e9ebef;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: #6f8f35; }
+  body {
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    padding: 56px 48px;
+    background:
+      radial-gradient(120% 60% at 50% 115%, #5d7f2e 0%, #7d9a3c 35%, rgba(125,154,60,0) 70%),
+      radial-gradient(80% 40% at 100% 85%, #4f7a2a 0%, rgba(79,122,42,0) 70%),
+      linear-gradient(180deg, #8ecfe0 0%, #a6d8e6 35%, #bfe2ea 55%, #9fbf6a 80%, #6f8f35 100%);
+    background-size: 100% 100%;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame {
+    max-width: 1640px;
+    margin: 0 auto;
+    padding: 14px;
+    border-radius: 26px;
+    background: rgba(255,255,255,.35);
+    border: 1px solid rgba(255,255,255,.6);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 30px 80px rgba(20,60,40,.25);
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    background: var(--bg);
+    border-radius: 18px;
+    overflow: hidden;
+    min-height: 900px;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: #fff;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 0;
+    gap: 6px;
+  }
+  .logo { width: 42px; height: 42px; margin-bottom: 18px; }
+  .nav-btn {
+    width: 46px; height: 46px;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    color: #4b5563;
+    cursor: pointer;
+    border: 0; background: none;
+    transition: background .15s, color .15s;
+  }
+  .nav-btn:hover { background: var(--row); color: var(--text); }
+  .nav-btn.active { background: var(--accent); color: #fff; box-shadow: 0 6px 14px rgba(14,165,233,.35); }
+  .nav-btn svg { width: 24px; height: 24px; }
+  .sep { width: 44px; height: 1px; background: var(--border); margin: 10px 0; }
+  .spacer { flex: 1; }
+  .avatar {
+    width: 46px; height: 46px; border-radius: 12px; margin-top: 6px;
+    background: linear-gradient(135deg, #334155, #64748b);
+    color: #fff; font-weight: 600; font-size: 15px;
+    display: grid; place-items: center;
+  }
+
+  /* Main */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .topbar {
+    height: 76px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px 0 16px;
+  }
+  .crumbs { font-size: 17px; color: var(--muted); }
+  .crumbs b { color: var(--text); font-weight: 600; }
+  .crumbs span { margin: 0 8px; color: var(--faint); }
+  .top-actions { display: flex; align-items: center; gap: 18px; }
+  .link { font-weight: 600; font-size: 16px; cursor: pointer; }
+  .icon-btn {
+    width: 48px; height: 48px; border-radius: 12px;
+    border: 1px solid var(--border); background: #fff;
+    display: grid; place-items: center; cursor: pointer; color: var(--text);
+  }
+  .icon-btn svg { width: 24px; height: 24px; }
+  .top-actions .icon-btn + .icon-btn { margin-left: -4px; }
+
+  .content { padding: 18px 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 14.5px; margin-top: 8px; }
+  .head-actions { display: flex; gap: 14px; }
+  .btn {
+    height: 46px; padding: 0 14px;
+    display: inline-flex; align-items: center; gap: 10px;
+    border: 1px solid var(--border); background: #fff; border-radius: 10px;
+    font: 600 16px "Inter", sans-serif; color: var(--text); cursor: pointer;
+  }
+  .btn svg { width: 22px; height: 22px; }
+  .btn .chev { width: 16px; height: 16px; margin-left: 4px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .card-title { font-size: 16.5px; font-weight: 600; }
+
+  /* KPI */
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .kpi .label { color: var(--muted); font-size: 16px; }
+  .kpi .value { font-size: 26px; font-weight: 600; margin: 18px 0 14px; letter-spacing: -.01em; }
+  .kpi .foot { display: flex; justify-content: space-between; align-items: flex-end; }
+  .trend { color: var(--green); font-size: 14.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+  .trend svg { width: 16px; height: 16px; }
+  .trend em { font-style: normal; color: var(--muted); font-weight: 400; }
+  .spark { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+  .spark i { width: 4px; border-radius: 2px; display: block; }
+
+  /* Chart row */
+  .row-2 { display: grid; grid-template-columns: 1.92fr 1fr; gap: 12px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: flex-start; }
+  .seg { display: inline-flex; background: var(--row); border-radius: 10px; padding: 3px; }
+  .seg button {
+    border: 0; background: none; padding: 7px 14px; border-radius: 8px;
+    font: 500 16px "Inter", sans-serif; color: var(--faint); cursor: pointer;
+  }
+  .seg button.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .chart-wrap { position: relative; margin-top: 18px; }
+  .chart-wrap svg { width: 100%; height: 280px; display: block; overflow: visible; }
+  .xlabels { display: flex; justify-content: space-between; color: var(--muted); font-size: 14.5px; margin-top: 12px; }
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0;
+    background: #111827; color: #fff; font-size: 12.5px; padding: 6px 9px; border-radius: 8px;
+    transform: translate(-50%, -120%); white-space: nowrap; transition: opacity .12s;
+  }
+
+  .stick-head { display: flex; justify-content: space-between; }
+  .growing { color: var(--green); font-size: 14.5px; font-weight: 500; }
+  .stick-body { display: flex; align-items: center; gap: 22px; margin: 16px 0 18px; }
+  .ring { position: relative; width: 150px; height: 150px; flex: none; }
+  .ring svg { width: 150px; height: 150px; transform: rotate(-90deg); }
+  .ring .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+  .ring .center b { font-size: 24px; font-weight: 600; }
+  .ring .center small { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+  .stick-copy h3 { font-size: 19px; font-weight: 600; margin-bottom: 10px; }
+  .stick-copy p { color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .ratio {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--row); border-radius: 10px; padding: 14px 12px; margin-top: 10px;
+    font-size: 14.5px; font-weight: 500;
+  }
+  .ratio .k { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  /* Bottom row */
+  .row-3 { display: grid; grid-template-columns: 1fr 0.84fr 1fr; gap: 12px; }
+  .list-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+  .list-head small { color: var(--muted); font-size: 14.5px; }
+
+  .funnel-item { background: var(--row); border-radius: 10px; padding: 10px 12px 12px; margin-top: 10px; }
+  .funnel-top { display: flex; align-items: center; gap: 12px; }
+  .badge { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; font-weight: 500; font-size: 15px; flex: none; }
+  .badge.solid { background: var(--accent); color: #fff; }
+  .badge.soft { background: var(--accent-soft); color: var(--accent); }
+  .funnel-text { flex: 1; min-width: 0; }
+  .funnel-text b { font-weight: 500; font-size: 15px; display: block; }
+  .funnel-text small { color: var(--muted); font-size: 12.5px; }
+  .funnel-num { text-align: right; }
+  .funnel-num b { font-weight: 500; font-size: 15px; }
+  .funnel-num .drop { color: var(--red); font-size: 12.5px; margin-left: 6px; }
+  .funnel-num small { display: block; color: var(--faint); font-size: 12.5px; margin-top: 2px; }
+  .bar { height: 4px; border-radius: 4px; background: var(--track); margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 4px; }
+
+  .metric {
+    display: grid; grid-template-columns: 1.4fr 1fr auto; align-items: center;
+    background: var(--row); border-radius: 10px; padding: 11px 12px; margin-top: 9px;
+    font-size: 14.5px; font-weight: 500;
+  }
+  .metric .v { text-align: left; }
+  .metric .s { font-size: 14px; color: var(--green); display: inline-flex; align-items: center; gap: 4px; justify-self: end; }
+  .metric .s.up { color: var(--faint); }
+  .metric .s svg { width: 14px; height: 14px; }
+
+  .segment { background: var(--row); border-radius: 10px; padding: 12px 12px 10px; margin-top: 10px; }
+  .segment .top { display: flex; justify-content: space-between; font-size: 14.5px; font-weight: 500; }
+  .segment .top .k { display: flex; align-items: center; gap: 10px; }
+  .segment small { display: block; color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  @media (max-width: 1200px) {
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .row-2, .row-3 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    body { padding: 16px; }
+    .frame { padding: 6px; }
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .top-actions .link { display: none; }
+    .stick-body { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <svg class="logo" viewBox="0 0 42 42" aria-label="Logo">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22b8ef"/><stop offset="1" stop-color="#0369a1"/></linearGradient></defs>
+        <path fill="url(#lg)" d="M4 8a6 6 0 0 1 6-6h6v10a4 4 0 0 1-4 4H2V8h2zM26 2h6a6 6 0 0 1 6 6v8H30a4 4 0 0 1-4-4V2zM2 26h10a4 4 0 0 1 4 4v10h-6a6 6 0 0 1-6-6v-8H2zM30 26h10v8a6 6 0 0 1-6 6h-8V30a4 4 0 0 1 4-4z"/>
+        <rect x="15" y="15" width="12" height="12" rx="3" fill="url(#lg)"/>
+      </svg>
+      <button class="nav-btn active" title="Overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></button>
+      <button class="nav-btn" title="Users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.5 3.3-5.5 6.5-5.5s5.9 2 6.5 5.5"/><path d="M15.5 4.8a3.5 3.5 0 0 1 0 6.4M18 14.8c2 .7 3.2 2.4 3.5 5.2"/></svg></button>
+      <button class="nav-btn" title="Layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3 2.5 8 12 13l9.5-5L12 3z"/><path d="m2.5 12 9.5 5 9.5-5"/><path d="m2.5 16 9.5 5 9.5-5"/></svg></button>
+      <button class="nav-btn" title="Analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m6.5 15 4-5 3.5 3 5-6.5"/></svg></button>
+      <button class="nav-btn" title="Data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13"/><path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/></svg></button>
+      <div class="sep"></div>
+      <button class="nav-btn" title="Projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="3"/><path d="M8.5 7V5.5A1.5 1.5 0 0 1 10 4h4a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M3 12.5h18"/><path d="M10 12.5v1.5h4v-1.5"/></svg></button>
+      <button class="nav-btn" title="Reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 21h18"/><rect x="4.5" y="11" width="4" height="10" rx="1"/><rect x="10" y="4" width="4" height="17" rx="1"/><rect x="15.5" y="8" width="4" height="13" rx="1"/></svg></button>
+      <button class="nav-btn" title="Regions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg></button>
+      <div class="spacer"></div>
+      <button class="nav-btn" title="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg></button>
+      <button class="nav-btn" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <div class="sep"></div>
+      <div class="avatar">JD</div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+      <header class="topbar">
+        <div class="crumbs">General<span>/</span><b>Product Analytics</b></div>
+        <div class="top-actions">
+          <span class="link">Give Feedback</span>
+          <button class="icon-btn" title="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-3.5-3.5"/></svg></button>
+          <button class="icon-btn" title="Messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z"/><path d="M8 10.5h8M8 14h5"/></svg></button>
+          <button class="icon-btn" title="Notifications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg></button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="page-head">
+          <div>
+            <h1>Performance Overview</h1>
+            <p class="sub">Monitor key metrics, user behavior, and product growth.</p>
+          </div>
+          <div class="head-actions">
+            <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/><path d="M7.5 13h1M11.5 13h1M15.5 13h1M7.5 16.5h1M11.5 16.5h1M15.5 16.5h1" stroke-width="2" stroke-linecap="round"/></svg>1 July - 30 July 2026<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+            <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5L3 4z"/></svg>Filter</button>
+            <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 14v4a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-4"/></svg>Export</button>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <section class="kpis" id="kpis"></section>
+
+        <!-- Chart + stickiness -->
+        <section class="row-2">
+          <div class="card">
+            <div class="chart-head">
+              <div class="card-title">Daily Activity Users - 30 Days</div>
+              <div class="seg" id="seg">
+                <button class="on" data-k="dau">DAU</button>
+                <button data-k="wau">WAU</button>
+              </div>
+            </div>
+            <div class="chart-wrap" id="chartWrap">
+              <svg id="chart" viewBox="0 0 1000 280" preserveAspectRatio="none"></svg>
+              <div class="tip" id="tip"></div>
+            </div>
+            <div class="xlabels"><span>Jul 1</span><span>Jul 8</span><span>Jul 15</span><span>Jul 22</span><span>Jul 30</span></div>
+          </div>
+
+          <div class="card">
+            <div class="stick-head">
+              <div class="card-title">Stickiness</div>
+              <span class="growing">Growing</span>
+            </div>
+            <div class="stick-body">
+              <div class="ring">
+                <svg viewBox="0 0 150 150">
+                  <circle cx="75" cy="75" r="64" fill="none" stroke="#eef0f3" stroke-width="12"/>
+                  <circle cx="75" cy="75" r="64" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
+                          stroke-dasharray="402.1" stroke-dashoffset="342.6"/>
+                </svg>
+                <div class="center"><b>14.8%</b><small>DAU/MAU</small></div>
+              </div>
+              <div class="stick-copy">
+                <h3>Above B2B Median</h3>
+                <p>B2B SaaS median is 13%. Your stickiness increase 2.1pp this quarter.</p>
+              </div>
+            </div>
+            <div class="ratio"><span class="k"><i class="dot" style="background:var(--red)"></i>DAU / MAU</span><span style="color:var(--red)">14.8%</span></div>
+            <div class="ratio"><span class="k"><i class="dot" style="background:var(--accent)"></i>DAU / WAU</span><span style="color:var(--accent)">33.4%</span></div>
+            <div class="ratio"><span class="k"><i class="dot" style="background:var(--purple)"></i>WAU / MAU</span><span style="color:var(--purple)">44.5%</span></div>
+          </div>
+        </section>
+
+        <!-- Bottom row -->
+        <section class="row-3">
+          <div class="card">
+            <div class="list-head"><div class="card-title">User Segments</div><small>This Month</small></div>
+            <div id="funnel"></div>
+          </div>
+          <div class="card">
+            <div class="list-head"><div class="card-title">Session Metrics</div></div>
+            <div id="metrics"></div>
+          </div>
+          <div class="card">
+            <div class="list-head"><div class="card-title">User Segments</div></div>
+            <div id="segments"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</div>
+
+<script>
+const ICON_TREND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>';
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+const ICON_CARET = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 15h12l-6-7z"/></svg>';
+
+// KPI cards: label, value, trend, suffix, spark colors [light, dark]
+const kpis = [
+  ["Daily Active Users", "4,218", "14%", "vs avg", ["#fecaca", "#ef4444"]],
+  ["Weekly Active Users", "12,640", "8.2%", "", ["#bae6fd", "#0284c7"]],
+  ["Monthly Active Users", "28,420", "22%", "MoM", ["#ddd6fe", "#4f46e5"]],
+  ["Avg Session Duration", "8m 24s", "42s", "", ["#bbf7d0", "#15803d"]],
+  ["Events per Users", "34.6", "4.2", "", ["#fde68a", "#f59e0b"]],
+];
+function lerpColor(a, b, t) {
+  const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return "rgb(" + x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(",") + ")";
+}
+document.getElementById("kpis").innerHTML = kpis.map(([label, value, trend, suffix, [c1, c2]]) => {
+  const heights = [10, 13, 15, 17, 20, 22, 25, 28];
+  const bars = heights.map((h, i) => `<i style="height:${h}px;background:${lerpColor(c1, c2, i / 7)}"></i>`).join("");
+  return `<div class="card kpi">
+    <div class="label">${label}</div>
+    <div class="value">${value}</div>
+    <div class="foot">
+      <span class="trend">${ICON_TREND}${trend}${suffix ? ` <em style="color:var(--green)">${suffix}</em>` : ""}</span>
+      <span class="spark">${bars}</span>
+    </div>
+  </div>`;
+}).join("");
+
+// Chart data (y in viewBox units, lower = higher value)
+const series = {
+  dau: { pts: [[0,155],[45,165],[90,183],[150,160],[200,120],[240,105],[287,99],[320,80],[340,72],[370,90],[400,145],[420,160],[460,150],[500,138],[525,135],[560,130],[590,128],[625,110],[660,80],[700,62],[740,58],[765,55],[800,72],[840,90],[880,80],[920,50],[960,38],[1000,28]],
+         marks: [[287, "Weekend"], [525, "Weekend"], [765, "Weekend"]], base: 4218 },
+  wau: { pts: [[0,140],[60,138],[120,130],[180,122],[240,112],[300,105],[360,100],[420,104],[480,98],[540,90],[600,86],[660,80],[720,72],[780,70],[840,64],[900,55],[960,48],[1000,42]],
+         marks: [], base: 12640 },
+};
+function smoothPath(p) {
+  let d = `M${p[0][0]},${p[0][1]}`;
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+function yAt(pts, x) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (x >= pts[i][0] && x <= pts[i + 1][0]) {
+      const t = (x - pts[i][0]) / (pts[i + 1][0] - pts[i][0]);
+      return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t;
+    }
+  }
+  return pts[pts.length - 1][1];
+}
+const svg = document.getElementById("chart");
+let current = "dau";
+function drawChart() {
+  const { pts, marks } = series[current];
+  const line = smoothPath(pts);
+  const grid = [5, 72, 140, 208, 275].map(y => `<line x1="0" x2="1000" y1="${y}" y2="${y}" stroke="#eef0f3" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("");
+  const markers = marks.map(([x, label]) => {
+    const y = yAt(pts, x);
+    return `<circle cx="${x}" cy="${y}" r="4" fill="#fff" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+            <text x="${x + 24}" y="${y + 18}" font-size="12.5" fill="#6b7280" text-anchor="middle" font-family="Inter">${label}</text>`;
+  }).join("");
+  svg.innerHTML = `
+    <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7dd3fc" stop-opacity=".45"/><stop offset="1" stop-color="#e0f2fe" stop-opacity=".15"/>
+    </linearGradient></defs>
+    ${grid}
+    <path d="${line} L1000,275 L0,275 Z" fill="url(#fill)"/>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    ${markers}
+    <line id="hoverLine" x1="0" x2="0" y1="5" y2="275" stroke="#cbd5e1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" opacity="0"/>
+    <circle id="hoverDot" r="4.5" fill="var(--accent)" stroke="#fff" stroke-width="2" opacity="0" vector-effect="non-scaling-stroke"/>`;
+}
+drawChart();
+
+document.getElementById("seg").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  document.querySelectorAll("#seg button").forEach(x => x.classList.toggle("on", x === b));
+  current = b.dataset.k;
+  drawChart();
+});
+
+const wrap = document.getElementById("chartWrap"), tip = document.getElementById("tip");
+wrap.addEventListener("mousemove", e => {
+  const r = svg.getBoundingClientRect();
+  const x = Math.max(0, Math.min(1000, (e.clientX - r.left) / r.width * 1000));
+  const { pts, base } = series[current];
+  const y = yAt(pts, x);
+  const day = Math.round(x / 1000 * 29) + 1;
+  const val = Math.round(base * (1 + (150 - y) / 400));
+  const hl = svg.querySelector("#hoverLine"), hd = svg.querySelector("#hoverDot");
+  hl.setAttribute("x1", x); hl.setAttribute("x2", x); hl.setAttribute("opacity", 1);
+  hd.setAttribute("cx", x); hd.setAttribute("cy", y); hd.setAttribute("opacity", 1);
+  tip.style.left = (x / 1000 * r.width) + "px";
+  tip.style.top = (y / 280 * r.height) + "px";
+  tip.textContent = `Jul ${day} · ${val.toLocaleString("en-US")} ${current.toUpperCase()}`;
+  tip.style.opacity = 1;
+});
+wrap.addEventListener("mouseleave", () => {
+  tip.style.opacity = 0;
+  svg.querySelector("#hoverLine").setAttribute("opacity", 0);
+  svg.querySelector("#hoverDot").setAttribute("opacity", 0);
+});
+
+// Funnel
+const funnel = [
+  ["Sign Up", "Account created", "2,840", "", "100%", 100],
+  ["Profile Setup", "Completed onboarding flow", "2,840", "-20%", "80%", 64],
+  ["First Value", "Created first report", "1,136", "-20%", "60%", 52],
+  ["Team Invite", "Added 1+ team member", "1,136", "-20%", "40%", 36],
+];
+document.getElementById("funnel").innerHTML = funnel.map(([t, s, n, drop, pct, w], i) => `
+  <div class="funnel-item">
+    <div class="funnel-top">
+      <span class="badge ${i === 0 ? "solid" : "soft"}">${i + 1}</span>
+      <div class="funnel-text"><b>${t}</b><small>${s}</small></div>
+      <div class="funnel-num"><b>${n}</b>${drop ? `<span class="drop">${drop}</span>` : ""}<small>${pct}</small></div>
+    </div>
+    <div class="bar"><i style="width:${w}%;background:var(--accent)"></i></div>
+  </div>`).join("");
+
+// Session metrics
+const metrics = [
+  ["Avg Duration", "8m 24s", "up"],
+  ["Bounce Rate", "18.4%", "Low"],
+  ["Pages / Session", "6.8", "up"],
+  ["Median Load", "1.2s", "Fast"],
+  ["Error Rate", "0.4%", "Low"],
+  ["Unique Events", "148K", "up"],
+];
+document.getElementById("metrics").innerHTML = metrics.map(([k, v, s]) => `
+  <div class="metric"><span>${k}</span><span class="v">${v}</span>
+    ${s === "up" ? `<span class="s up">${ICON_CARET}</span>` : `<span class="s">${s} ${ICON_CHECK}</span>`}
+  </div>`).join("");
+
+// Segments
+const segments = [
+  ["Power", "12%", "var(--red)", "≥5 session/week, ≥4 features", 22],
+  ["Regular", "34%", "var(--accent)", "2-4 sessions/week", 22],
+  ["Casual", "38%", "var(--orange)", "1 session/week", 22],
+  ["Dormant", "16%", "#9ca3af", "No session in 30 days", 0],
+];
+document.getElementById("segments").innerHTML = segments.map(([k, v, c, sub, w]) => `
+  <div class="segment">
+    <div class="top"><span class="k"><i class="dot" style="background:${c}"></i>${k}</span><span style="color:${w ? c : "var(--muted)"}">${v}</span></div>
+    <div class="bar"><i style="width:${w}%;background:${c}"></i></div>
+    <small>${sub}</small>
+  </div>`).join("");
+</script>
+</body>
+</html>
